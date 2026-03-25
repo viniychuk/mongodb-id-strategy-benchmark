@@ -10,45 +10,31 @@ Benchmarks 6 different `_id` strategies in MongoDB across 22 operations to help 
 
 ### Individual Inserts (ops/sec) — includes ID generation cost
 
-```mermaid
-xychart-beta horizontal
-  x-axis ["ObjectId", "UUID v7 (Bin)", "UUID v7 (Str)", "UUID v4", "AutoInc", "AutoInc-Str"]
-  y-axis "ops/sec" 0 --> 20000
-  bar [18033, 18824, 18282, 17916, 9437, 9191]
-```
+![Individual Write — Ops/sec](docs/images/individual-write-ops.png)
 
 **Auto-increment is ~50% slower** for individual inserts because each insert requires a `findOneAndUpdate` round-trip to a counter collection before the actual insert. All other strategies generate IDs client-side for ~0ms.
 
-### Bulk Inserts — Unordered (ops/sec)
+### Bulk Inserts (ops/sec)
 
-```mermaid
-xychart-beta horizontal
-  x-axis ["ObjectId", "UUID v7 (Bin)", "UUID v7 (Str)", "UUID v4", "AutoInc", "AutoInc-Str"]
-  y-axis "ops/sec" 0 --> 450000
-  bar [390739, 372520, 340565, 338648, 420211, 397546]
-```
+![Bulk Write — Ops/sec](docs/images/bulk-write-ops.png)
 
 With batch ID pre-allocation, **auto-increment leads bulk writes** (+8% vs ObjectId) thanks to sequential keys that append to B-tree leaf pages. **UUID v4 trails** (-13%) due to random key scatter.
 
+### Read Operations (ops/sec)
+
+![Read — Ops/sec](docs/images/read-ops.png)
+
+Point lookups are identical across all strategies. **UUID v4 collapses on range scans and pagination** (-62%) because random keys destroy B-tree locality. All other strategies perform comparably.
+
 ### Mixed Workload — 70/30 Read/Write, 10 Workers (ops/sec)
 
-```mermaid
-xychart-beta horizontal
-  x-axis ["ObjectId", "UUID v7 (Bin)", "UUID v7 (Str)", "UUID v4", "AutoInc", "AutoInc-Str"]
-  y-axis "ops/sec" 0 --> 50000
-  bar [43112, 46792, 44815, 42379, 35090, 36983]
-```
+![Sustained Workloads](docs/images/sustained.png)
 
 Under concurrent load, **auto-increment drops 19%** vs ObjectId — the counter document becomes a serialization bottleneck. All client-side strategies perform within 10% of each other.
 
-### Total Index Size (bytes, 100K documents)
+### Storage & Index Size
 
-```mermaid
-xychart-beta horizontal
-  x-axis ["ObjectId", "UUID v7 (Bin)", "UUID v7 (Str)", "UUID v4", "AutoInc", "AutoInc-Str"]
-  y-axis "bytes" 0 --> 16000000
-  bar [1290240, 1380352, 14807040, 12705792, 1359872, 9994240]
-```
+![Storage](docs/images/storage.png)
 
 Local WiredTiger reports artificially small sizes for compact modes (4 KB page minimums). On **Atlas M50, the real overhead is ~14%** (ObjectId: 32 MB vs UUID v7 string: 37 MB total index for 100K docs). The `_id_` index itself grows from 3.7 MB to 5.5 MB (+49%), and compound indexes containing `_id` pay the same per-entry overhead. UUID v7 binary stays comparable to ObjectId.
 
