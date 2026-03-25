@@ -243,9 +243,7 @@ function buildEnvSection(): string {
   const items: string[] = [];
   if (env.mongoVersion && env.mongoVersion !== 'unknown') items.push(`MongoDB ${env.mongoVersion}`);
   if (env.nodeVersion) items.push(`Node ${env.nodeVersion}`);
-  if (env.cpu) items.push(env.cpu);
-  if (env.cpuCores) items.push(`${env.cpuCores} cores`);
-  if (env.totalMemoryGB) items.push(`${env.totalMemoryGB} GB RAM`);
+  if (env.cpu) items.push(env.cpu.replace(/\s*(Max|Pro|Ultra)\b/gi, ''));
   if (env.platform) items.push(env.platform);
   if (env.mongoUri) items.push(env.mongoUri.includes('mongodb+srv') ? 'Atlas cluster' : 'Local MongoDB');
   if (items.length === 0) return '';

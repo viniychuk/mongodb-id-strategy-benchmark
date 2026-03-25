@@ -6,7 +6,7 @@ Benchmarks 6 different `_id` strategies in MongoDB across 22 operations to help 
 
 ## Key Findings
 
-> Tested on Apple M5 Max, 128 GB RAM, MongoDB 8.2.6, Node v24.14.0. 100K seeded documents, 5 runs with randomized mode order. Numbers below from median run.
+> Tested on Apple M5, MongoDB 8.2.6, Node v24.14.0. 100K seeded documents, 5 runs with randomized mode order. Numbers below from median run.
 
 ### Individual Inserts (ops/sec) — includes ID generation cost
 
