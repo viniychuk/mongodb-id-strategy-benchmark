@@ -22,19 +22,19 @@ With batch ID pre-allocation, **auto-increment leads bulk writes** (+8% vs Objec
 
 ### Read Operations (ops/sec)
 
-![Read — Ops/sec](docs/images/read-ops.png)
+<img src="docs/images/read-ops.png" alt="Read — Ops/sec" width="600">
 
 Point lookups are identical across all strategies. **UUID v4 collapses on range scans and pagination** (-62%) because random keys destroy B-tree locality. All other strategies perform comparably.
 
 ### Mixed Workload — 70/30 Read/Write, 10 Workers (ops/sec)
 
-![Sustained Workloads](docs/images/sustained.png)
+<img src="docs/images/sustained.png" alt="Sustained Workloads" width="600">
 
 Under concurrent load, **auto-increment drops 19%** vs ObjectId — the counter document becomes a serialization bottleneck. All client-side strategies perform within 10% of each other.
 
 ### Storage & Index Size
 
-![Storage](docs/images/storage.png)
+<img src="docs/images/storage.png" alt="Storage" width="600">
 
 Local WiredTiger reports artificially small sizes for compact modes (4 KB page minimums). On **Atlas M50, the real overhead is ~14%** (ObjectId: 32 MB vs UUID v7 string: 37 MB total index for 100K docs). The `_id_` index itself grows from 3.7 MB to 5.5 MB (+49%), and compound indexes containing `_id` pay the same per-entry overhead. UUID v7 binary stays comparable to ObjectId.
 
