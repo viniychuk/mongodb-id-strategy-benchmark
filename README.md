@@ -50,14 +50,14 @@ xychart-beta horizontal
   bar [1290240, 1380352, 14807040, 12705792, 1359872, 9994240]
 ```
 
-**String-based IDs bloat indexes 8-11x.** UUID v7 string: 14.1 MB vs ObjectId: 1.2 MB. UUID v7 binary achieves comparable index size to ObjectId (1.3 MB) by using 16-byte BSON Binary instead of 36-char strings.
+Local WiredTiger reports artificially small sizes for compact modes (4 KB page minimums). On **Atlas M50, the real overhead is ~14%** (ObjectId: 32 MB vs UUID v7 string: 37 MB total index for 100K docs). The `_id_` index itself grows from 3.7 MB to 5.5 MB (+49%), and compound indexes containing `_id` pay the same per-entry overhead. UUID v7 binary stays comparable to ObjectId.
 
 ### Bottom Line
 
 | If your use case is... | Best choice | Why |
 |---|---|---|
 | General purpose, MongoDB-only | **ObjectId** | Smallest indexes, zero config, built-in timestamp, no pathological cases |
-| IDs cross service/database boundaries | **UUID v7 (String)** | Universally portable, time-sortable, ~5-10% throughput cost, ~11x index overhead |
+| IDs cross service/database boundaries | **UUID v7 (String)** | Universally portable, time-sortable, ~5-10% throughput cost, ~14% total index overhead on Atlas |
 | Need compact UUID storage | **UUID v7 (Binary)** | Same performance as ObjectId, but requires serialize/deserialize at API boundaries |
 | Sequential write-heavy, single writer | **Auto-increment (Number)** | Best bulk insert throughput, but counter is a bottleneck under concurrency |
 | Any use case | **Avoid UUID v4** | Random keys destroy range scan performance (-62%) with no compensating benefit |
