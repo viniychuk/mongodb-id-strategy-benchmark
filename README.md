@@ -10,13 +10,13 @@ Benchmarks 6 different `_id` strategies in MongoDB across 22 operations to help 
 
 ### Individual Inserts (ops/sec) — includes ID generation cost
 
-![Individual Write — Ops/sec](docs/images/individual-write-ops.png)
+<img src="docs/images/individual-write-ops.png" alt="Individual Write — Ops/sec" width="600">
 
 **Auto-increment is ~50% slower** for individual inserts because each insert requires a `findOneAndUpdate` round-trip to a counter collection before the actual insert. All other strategies generate IDs client-side for ~0ms.
 
 ### Bulk Inserts (ops/sec)
 
-![Bulk Write — Ops/sec](docs/images/bulk-write-ops.png)
+<img src="docs/images/bulk-write-ops.png" alt="Bulk Write — Ops/sec" width="600">
 
 With batch ID pre-allocation, **auto-increment leads bulk writes** (+8% vs ObjectId) thanks to sequential keys that append to B-tree leaf pages. **UUID v4 trails** (-13%) due to random key scatter.
 
