@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MongoDB ID Strategy Benchmark Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --bg2: #1a1d27;
+      --bg3: #242836;
+      --border: #2e3348;
+      --text: #e4e7f0;
+      --text2: #9198ad;
+      --text3: #5d6480;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    header { text-align: center; margin-bottom: 2rem; }
+    header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.3rem; }
+    header p { color: var(--text2); font-size: 0.9rem; }
+
+    .env-info {
+      text-align: center; color: var(--text3); font-size: 0.8rem;
+      margin-bottom: 2rem; padding: 0.5rem;
+    }
+
+    .legend {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 1.2rem;
+      margin-bottom: 2rem; padding: 1rem; background: var(--bg2);
+      border-radius: 12px; border: 1px solid var(--border);
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    .legend-base { font-size: 0.7rem; color: var(--text3); margin-left: 0.2rem; }
+
+    section { margin-bottom: 3rem; }
+    section h2 {
+      font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem;
+      padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    }
+    section h3 { font-size: 1rem; font-weight: 500; color: var(--text2); margin-bottom: 0.75rem; }
+
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    .chart-box {
+      background: var(--bg2); border-radius: 12px; border: 1px solid var(--border);
+      padding: 1.25rem;
+    }
+    .chart-wrap { position: relative; height: 300px; }
+    .chart-box h3 { margin-bottom: 0.5rem; }
+
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.82rem;
+      background: var(--bg2); border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    thead th {
+      background: var(--bg3); padding: 0.7rem 0.6rem; text-align: right;
+      font-weight: 600; color: var(--text2); white-space: nowrap;
+      border-bottom: 2px solid var(--border);
+    }
+    thead th:first-child { text-align: left; }
+    tbody td {
+      padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border);
+      text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
+    }
+    tbody td.bench-name { text-align: left; font-weight: 500; color: var(--text); }
+    tbody td small { color: var(--text3); margin-left: 1px; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg3); }
+
+    .pct {
+      display: inline-block; font-size: 0.7rem; margin-left: 0.35rem;
+      padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 600;
+    }
+    .pct.better { color: #34d399; background: #34d39915; }
+    .pct.worse { color: #f87171; background: #f8717115; }
+    .pct.neutral { color: var(--text3); background: transparent; }
+
+    .metric-cell { min-width: 110px; }
+
+    .storage-grid, .sustained-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;
+    }
+    .storage-card, .sustained-card {
+      background: var(--bg2); border-radius: 12px; border: 1px solid var(--border);
+      padding: 1.25rem;
+    }
+    .storage-card h4, .sustained-card h4 { font-size: 0.9rem; margin-bottom: 0.75rem; }
+    .storage-card h5 { font-size: 0.75rem; color: var(--text3); margin: 0.75rem 0 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-row { display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.8rem; }
+    .stat-label { color: var(--text2); }
+    .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .sustained-metric { text-align: center; margin-bottom: 0.5rem; }
+    .metric-title { display: block; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-big { display: block; font-size: 1.6rem; font-weight: 700; line-height: 1.3; }
+    .metric-unit { font-size: 0.7rem; color: var(--text3); }
+
+    .note {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.75rem 1rem; font-size: 0.8rem; color: var(--text2); margin-bottom: 1.5rem;
+    }
+    .note strong { color: var(--text); }
+
+    .methodology {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.25rem; font-size: 0.8rem; color: var(--text2); margin-bottom: 1.5rem;
+      line-height: 1.7;
+    }
+    .methodology strong { color: var(--text); }
+    .methodology ul { margin: 0.5rem 0; padding-left: 1.2rem; }
+
+    @media (max-width: 900px) {
+      .chart-row { grid-template-columns: 1fr; }
+      table { font-size: 0.75rem; }
+      .storage-grid, .sustained-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .storage-grid, .sustained-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>MongoDB _id Strategy Benchmark</h1>
+    <p>Comparing 6 ID strategies across 23 benchmarks &middot; 100,000 seeded documents &middot; 2026-03-25 02:45:19 UTC</p>
+  </header>
+
+  <div class="env-info">MongoDB 8.2.6 &middot; Node v24.14.0 &middot; Apple M5 Max &middot; 18 cores &middot; 128 GB RAM &middot; darwin arm64 &middot; Local MongoDB</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Auto-increment (Number)</div><div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div>Auto-increment (String)</div><div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>ObjectId<span class="legend-base">(baseline)</span></div><div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>UUID v4</div><div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>UUID v7 (Binary)</div><div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>UUID v7 (String)</div>
+  </div>
+
+  <div class="methodology">
+    <strong>Methodology:</strong> Each mode seeds the same collection structure (documents with username, email, score, status, tags, timestamps, metadata) then runs identical benchmarks. ID generation cost is included in write measurements — this is intentional, as auto-increment modes pay a real DB round-trip per ID via <code>findOneAndUpdate</code>. Bulk operations use batch ID allocation (one DB call per batch). Mode execution order is randomized to eliminate first-mover cache bias. Write concern is default (<code>w:1</code>).
+    <ul>
+      <li><strong>Individual Write:</strong> Single-document inserts and upserts — shows per-operation overhead including ID generation</li>
+      <li><strong>Bulk Write:</strong> insertMany in batches of 5,000 — ID generation excluded from timing, measures pure insert throughput</li>
+      <li><strong>Read/Query:</strong> Point lookups, range scans, pagination, aggregation — measures index efficiency by ID type</li>
+      <li><strong>Sustained:</strong> 30-second continuous write + mixed read/write with 10 concurrent workers</li>
+    </ul>
+  </div>
+
+  <div class="note"><strong>Reading the tables:</strong> Percentages show difference vs ObjectId (baseline). For ops/sec, <span class="pct better">green = faster</span>. For latency, <span class="pct better">green = lower (faster)</span>, <span class="pct worse">red = higher (slower)</span>.</div>
+
+  <!-- CHARTS -->
+  <section>
+    <h2>Visual Overview</h2>
+    <div class="chart-row"><div class="chart-box"><h3>Individual Write — Ops/sec</h3><div class="chart-wrap"><canvas id="chart-individual-ops"></canvas></div></div><div class="chart-box"><h3>Bulk Write — Ops/sec</h3><div class="chart-wrap"><canvas id="chart-bulk-ops"></canvas></div></div></div><div class="chart-row"><div class="chart-box"><h3>Read — Ops/sec</h3><div class="chart-wrap"><canvas id="chart-read-ops"></canvas></div></div><div class="chart-box"><h3>Query — Ops/sec</h3><div class="chart-wrap"><canvas id="chart-query-ops"></canvas></div></div></div><div class="chart-row"><div class="chart-box"><h3>Update/Delete — Ops/sec</h3><div class="chart-wrap"><canvas id="chart-ud-ops"></canvas></div></div><div class="chart-box"><h3>Read — p99 Latency (ms)</h3><div class="chart-wrap"><canvas id="chart-read-p99"></canvas></div></div></div><div class="chart-row"><div class="chart-box"><h3>Query — p99 Latency (ms)</h3><div class="chart-wrap"><canvas id="chart-query-p99"></canvas></div></div><div class="chart-box"><h3>Individual Write — p99 Latency (ms)</h3><div class="chart-wrap"><canvas id="chart-individual-p99"></canvas></div></div></div>
+  </section>
+
+  
+  <section>
+    <h2>Individual Write — Ops/sec</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Individual Inserts</td><td class="metric-cell">9,437<span class="pct worse">-47.7%</span></td><td class="metric-cell">9,191<span class="pct worse">-49.0%</span></td><td class="metric-cell">18,033</td><td class="metric-cell">17,916<span class="pct neutral">-0.6%</span></td><td class="metric-cell">18,824<span class="pct better">+4.4%</span></td><td class="metric-cell">18,282<span class="pct neutral">+1.4%</span></td></tr><tr><td class="bench-name">Upserts</td><td class="metric-cell">17,222<span class="pct better">+15.0%</span></td><td class="metric-cell">14,581<span class="pct worse">-2.7%</span></td><td class="metric-cell">14,980</td><td class="metric-cell">15,629<span class="pct better">+4.3%</span></td><td class="metric-cell">17,687<span class="pct better">+18.1%</span></td><td class="metric-cell">17,397<span class="pct better">+16.1%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Individual Write — p50 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Individual Inserts</td><td class="metric-cell">0.10<small>ms</small><span class="pct worse">+95.1%</span></td><td class="metric-cell">0.10<small>ms</small><span class="pct worse">+97.2%</span></td><td class="metric-cell">0.05<small>ms</small></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">+1.3%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-5.1%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-1.5%</span></td></tr><tr><td class="bench-name">Upserts</td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-2.7%</span></td><td class="metric-cell">0.06<small>ms</small><span class="pct neutral">-1.3%</span></td><td class="metric-cell">0.06<small>ms</small></td><td class="metric-cell">0.06<small>ms</small><span class="pct neutral">-0.0%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-4.1%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-2.4%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Individual Write — p99 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Individual Inserts</td><td class="metric-cell">0.17<small>ms</small><span class="pct worse">+45.5%</span></td><td class="metric-cell">0.22<small>ms</small><span class="pct worse">+92.4%</span></td><td class="metric-cell">0.12<small>ms</small></td><td class="metric-cell">0.11<small>ms</small><span class="pct better">-6.0%</span></td><td class="metric-cell">0.11<small>ms</small><span class="pct better">-6.7%</span></td><td class="metric-cell">0.12<small>ms</small><span class="pct neutral">-0.6%</span></td></tr><tr><td class="bench-name">Upserts</td><td class="metric-cell">0.11<small>ms</small><span class="pct better">-59.3%</span></td><td class="metric-cell">0.32<small>ms</small><span class="pct worse">+22.4%</span></td><td class="metric-cell">0.26<small>ms</small></td><td class="metric-cell">0.18<small>ms</small><span class="pct better">-32.5%</span></td><td class="metric-cell">0.10<small>ms</small><span class="pct better">-60.9%</span></td><td class="metric-cell">0.10<small>ms</small><span class="pct better">-60.8%</span></td></tr></tbody>
+    </table>
+  </section>
+  
+  <section>
+    <h2>Bulk Write — Ops/sec</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Unordered Bulk Inserts</td><td class="metric-cell">420,211<span class="pct better">+7.5%</span></td><td class="metric-cell">397,546<span class="pct neutral">+1.7%</span></td><td class="metric-cell">390,739</td><td class="metric-cell">338,648<span class="pct worse">-13.3%</span></td><td class="metric-cell">372,520<span class="pct worse">-4.7%</span></td><td class="metric-cell">340,565<span class="pct worse">-12.8%</span></td></tr><tr><td class="bench-name">Ordered Bulk Inserts</td><td class="metric-cell">299,090<span class="pct worse">-6.5%</span></td><td class="metric-cell">355,357<span class="pct better">+11.1%</span></td><td class="metric-cell">319,781</td><td class="metric-cell">274,279<span class="pct worse">-14.2%</span></td><td class="metric-cell">310,672<span class="pct worse">-2.8%</span></td><td class="metric-cell">250,100<span class="pct worse">-21.8%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Bulk Write — p50 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Unordered Bulk Inserts</td><td class="metric-cell">11.28<small>ms</small><span class="pct neutral">+0.1%</span></td><td class="metric-cell">11.45<small>ms</small><span class="pct neutral">+1.6%</span></td><td class="metric-cell">11.27<small>ms</small></td><td class="metric-cell">13.59<small>ms</small><span class="pct worse">+20.5%</span></td><td class="metric-cell">11.80<small>ms</small><span class="pct worse">+4.7%</span></td><td class="metric-cell">13.55<small>ms</small><span class="pct worse">+20.2%</span></td></tr><tr><td class="bench-name">Ordered Bulk Inserts</td><td class="metric-cell">16.11<small>ms</small><span class="pct worse">+7.9%</span></td><td class="metric-cell">12.35<small>ms</small><span class="pct better">-17.3%</span></td><td class="metric-cell">14.93<small>ms</small></td><td class="metric-cell">17.00<small>ms</small><span class="pct worse">+13.8%</span></td><td class="metric-cell">15.15<small>ms</small><span class="pct neutral">+1.5%</span></td><td class="metric-cell">19.09<small>ms</small><span class="pct worse">+27.8%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Bulk Write — p99 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Unordered Bulk Inserts</td><td class="metric-cell">25.46<small>ms</small><span class="pct better">-22.4%</span></td><td class="metric-cell">25.62<small>ms</small><span class="pct better">-21.9%</span></td><td class="metric-cell">32.80<small>ms</small></td><td class="metric-cell">26.33<small>ms</small><span class="pct better">-19.7%</span></td><td class="metric-cell">27.74<small>ms</small><span class="pct better">-15.4%</span></td><td class="metric-cell">26.51<small>ms</small><span class="pct better">-19.2%</span></td></tr><tr><td class="bench-name">Ordered Bulk Inserts</td><td class="metric-cell">32.74<small>ms</small><span class="pct worse">+4.4%</span></td><td class="metric-cell">37.63<small>ms</small><span class="pct worse">+20.0%</span></td><td class="metric-cell">31.37<small>ms</small></td><td class="metric-cell">34.38<small>ms</small><span class="pct worse">+9.6%</span></td><td class="metric-cell">33.20<small>ms</small><span class="pct worse">+5.8%</span></td><td class="metric-cell">40.57<small>ms</small><span class="pct worse">+29.3%</span></td></tr></tbody>
+    </table>
+  </section>
+  
+  <section>
+    <h2>Read — Ops/sec</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Find by _id</td><td class="metric-cell">18,875<span class="pct better">+2.5%</span></td><td class="metric-cell">18,013<span class="pct worse">-2.2%</span></td><td class="metric-cell">18,417</td><td class="metric-cell">18,475<span class="pct neutral">+0.3%</span></td><td class="metric-cell">19,026<span class="pct better">+3.3%</span></td><td class="metric-cell">18,713<span class="pct neutral">+1.6%</span></td></tr><tr><td class="bench-name">Find by _id $in</td><td class="metric-cell">6,101<span class="pct better">+4.8%</span></td><td class="metric-cell">5,720<span class="pct neutral">-1.7%</span></td><td class="metric-cell">5,819</td><td class="metric-cell">4,568<span class="pct worse">-21.5%</span></td><td class="metric-cell">5,929<span class="pct neutral">+1.9%</span></td><td class="metric-cell">5,730<span class="pct neutral">-1.5%</span></td></tr><tr><td class="bench-name">Range Scan on _id</td><td class="metric-cell">3,278<span class="pct better">+2.6%</span></td><td class="metric-cell">3,314<span class="pct better">+3.7%</span></td><td class="metric-cell">3,195</td><td class="metric-cell">1,212<span class="pct worse">-62.1%</span></td><td class="metric-cell">3,272<span class="pct better">+2.4%</span></td><td class="metric-cell">3,063<span class="pct worse">-4.2%</span></td></tr><tr><td class="bench-name">Cursor Pagination (_id)</td><td class="metric-cell">6,175<span class="pct better">+4.0%</span></td><td class="metric-cell">6,339<span class="pct better">+6.8%</span></td><td class="metric-cell">5,935</td><td class="metric-cell">2,571<span class="pct worse">-56.7%</span></td><td class="metric-cell">6,104<span class="pct better">+2.8%</span></td><td class="metric-cell">5,942<span class="pct neutral">+0.1%</span></td></tr><tr><td class="bench-name">Cursor Pagination (createdAt + _id)</td><td class="metric-cell">4,982<span class="pct neutral">+1.9%</span></td><td class="metric-cell">5,160<span class="pct better">+5.6%</span></td><td class="metric-cell">4,889</td><td class="metric-cell">3,701<span class="pct worse">-24.3%</span></td><td class="metric-cell">5,069<span class="pct better">+3.7%</span></td><td class="metric-cell">4,927<span class="pct neutral">+0.8%</span></td></tr><tr><td class="bench-name">Count Documents</td><td class="metric-cell">460.31<span class="pct worse">-2.9%</span></td><td class="metric-cell">494.19<span class="pct better">+4.3%</span></td><td class="metric-cell">473.94</td><td class="metric-cell">439.69<span class="pct worse">-7.2%</span></td><td class="metric-cell">467.46<span class="pct neutral">-1.4%</span></td><td class="metric-cell">445.90<span class="pct worse">-5.9%</span></td></tr><tr><td class="bench-name">Random Access by _id</td><td class="metric-cell">18,048<span class="pct better">+3.3%</span></td><td class="metric-cell">18,232<span class="pct better">+4.3%</span></td><td class="metric-cell">17,476</td><td class="metric-cell">18,319<span class="pct better">+4.8%</span></td><td class="metric-cell">17,972<span class="pct better">+2.8%</span></td><td class="metric-cell">17,392<span class="pct neutral">-0.5%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Read — p50 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Find by _id</td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-0.3%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct worse">+2.7%</span></td><td class="metric-cell">0.05<small>ms</small></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">+0.8%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-1.0%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">+0.1%</span></td></tr><tr><td class="bench-name">Find by _id $in</td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-3.9%</span></td><td class="metric-cell">0.17<small>ms</small><span class="pct neutral">+1.6%</span></td><td class="metric-cell">0.17<small>ms</small></td><td class="metric-cell">0.21<small>ms</small><span class="pct worse">+27.4%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct neutral">-1.6%</span></td><td class="metric-cell">0.17<small>ms</small><span class="pct worse">+2.0%</span></td></tr><tr><td class="bench-name">Range Scan on _id</td><td class="metric-cell">0.30<small>ms</small><span class="pct neutral">-1.9%</span></td><td class="metric-cell">0.30<small>ms</small><span class="pct better">-3.3%</span></td><td class="metric-cell">0.31<small>ms</small></td><td class="metric-cell">0.65<small>ms</small><span class="pct worse">+111.2%</span></td><td class="metric-cell">0.30<small>ms</small><span class="pct neutral">-1.9%</span></td><td class="metric-cell">0.31<small>ms</small><span class="pct worse">+2.1%</span></td></tr><tr><td class="bench-name">Cursor Pagination (_id)</td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-4.6%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-5.7%</span></td><td class="metric-cell">0.16<small>ms</small></td><td class="metric-cell">0.37<small>ms</small><span class="pct worse">+125.9%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-3.6%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct neutral">-0.2%</span></td></tr><tr><td class="bench-name">Cursor Pagination (createdAt + _id)</td><td class="metric-cell">0.20<small>ms</small><span class="pct better">-2.4%</span></td><td class="metric-cell">0.19<small>ms</small><span class="pct better">-5.3%</span></td><td class="metric-cell">0.20<small>ms</small></td><td class="metric-cell">0.25<small>ms</small><span class="pct worse">+24.0%</span></td><td class="metric-cell">0.19<small>ms</small><span class="pct better">-3.8%</span></td><td class="metric-cell">0.20<small>ms</small><span class="pct neutral">-0.3%</span></td></tr><tr><td class="bench-name">Count Documents</td><td class="metric-cell">2.09<small>ms</small><span class="pct neutral">+1.3%</span></td><td class="metric-cell">1.94<small>ms</small><span class="pct better">-6.2%</span></td><td class="metric-cell">2.07<small>ms</small></td><td class="metric-cell">2.15<small>ms</small><span class="pct worse">+4.1%</span></td><td class="metric-cell">2.08<small>ms</small><span class="pct neutral">+0.6%</span></td><td class="metric-cell">2.15<small>ms</small><span class="pct worse">+4.1%</span></td></tr><tr><td class="bench-name">Random Access by _id</td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-3.0%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-3.3%</span></td><td class="metric-cell">0.05<small>ms</small></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-5.7%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-2.8%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-0.5%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Read — p99 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Find by _id</td><td class="metric-cell">0.07<small>ms</small><span class="pct better">-14.3%</span></td><td class="metric-cell">0.09<small>ms</small><span class="pct worse">+7.7%</span></td><td class="metric-cell">0.09<small>ms</small></td><td class="metric-cell">0.08<small>ms</small><span class="pct better">-11.2%</span></td><td class="metric-cell">0.07<small>ms</small><span class="pct better">-16.9%</span></td><td class="metric-cell">0.08<small>ms</small><span class="pct better">-10.4%</span></td></tr><tr><td class="bench-name">Find by _id $in</td><td class="metric-cell">0.21<small>ms</small><span class="pct better">-22.0%</span></td><td class="metric-cell">0.25<small>ms</small><span class="pct better">-8.0%</span></td><td class="metric-cell">0.27<small>ms</small></td><td class="metric-cell">0.32<small>ms</small><span class="pct worse">+16.9%</span></td><td class="metric-cell">0.22<small>ms</small><span class="pct better">-20.6%</span></td><td class="metric-cell">0.25<small>ms</small><span class="pct better">-9.8%</span></td></tr><tr><td class="bench-name">Range Scan on _id</td><td class="metric-cell">0.49<small>ms</small><span class="pct worse">+2.4%</span></td><td class="metric-cell">0.43<small>ms</small><span class="pct better">-9.3%</span></td><td class="metric-cell">0.48<small>ms</small></td><td class="metric-cell">3.38<small>ms</small><span class="pct worse">+608.4%</span></td><td class="metric-cell">0.47<small>ms</small><span class="pct neutral">-1.3%</span></td><td class="metric-cell">0.59<small>ms</small><span class="pct worse">+23.8%</span></td></tr><tr><td class="bench-name">Cursor Pagination (_id)</td><td class="metric-cell">0.30<small>ms</small><span class="pct better">-4.3%</span></td><td class="metric-cell">0.18<small>ms</small><span class="pct better">-41.3%</span></td><td class="metric-cell">0.31<small>ms</small></td><td class="metric-cell">0.69<small>ms</small><span class="pct worse">+122.6%</span></td><td class="metric-cell">0.34<small>ms</small><span class="pct worse">+7.9%</span></td><td class="metric-cell">0.31<small>ms</small><span class="pct neutral">-0.4%</span></td></tr><tr><td class="bench-name">Cursor Pagination (createdAt + _id)</td><td class="metric-cell">0.26<small>ms</small><span class="pct worse">+2.2%</span></td><td class="metric-cell">0.24<small>ms</small><span class="pct better">-5.4%</span></td><td class="metric-cell">0.25<small>ms</small></td><td class="metric-cell">0.49<small>ms</small><span class="pct worse">+94.4%</span></td><td class="metric-cell">0.24<small>ms</small><span class="pct better">-3.7%</span></td><td class="metric-cell">0.26<small>ms</small><span class="pct worse">+5.1%</span></td></tr><tr><td class="bench-name">Count Documents</td><td class="metric-cell">3.00<small>ms</small><span class="pct worse">+12.9%</span></td><td class="metric-cell">3.21<small>ms</small><span class="pct worse">+21.2%</span></td><td class="metric-cell">2.65<small>ms</small></td><td class="metric-cell">4.28<small>ms</small><span class="pct worse">+61.2%</span></td><td class="metric-cell">2.70<small>ms</small><span class="pct neutral">+1.9%</span></td><td class="metric-cell">3.23<small>ms</small><span class="pct worse">+21.7%</span></td></tr><tr><td class="bench-name">Random Access by _id</td><td class="metric-cell">0.10<small>ms</small><span class="pct worse">+2.9%</span></td><td class="metric-cell">0.10<small>ms</small><span class="pct neutral">+0.2%</span></td><td class="metric-cell">0.10<small>ms</small></td><td class="metric-cell">0.10<small>ms</small><span class="pct better">-2.6%</span></td><td class="metric-cell">0.10<small>ms</small><span class="pct neutral">+0.6%</span></td><td class="metric-cell">0.11<small>ms</small><span class="pct worse">+10.9%</span></td></tr></tbody>
+    </table>
+  </section>
+  
+  <section>
+    <h2>Query — Ops/sec</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Secondary Index Query (score)</td><td class="metric-cell">2,156<span class="pct better">+13.2%</span></td><td class="metric-cell">1,574<span class="pct worse">-17.3%</span></td><td class="metric-cell">1,905</td><td class="metric-cell">1,873<span class="pct neutral">-1.7%</span></td><td class="metric-cell">1,738<span class="pct worse">-8.8%</span></td><td class="metric-cell">1,761<span class="pct worse">-7.5%</span></td></tr><tr><td class="bench-name">Sort by _id</td><td class="metric-cell">3,033<span class="pct better">+5.6%</span></td><td class="metric-cell">3,920<span class="pct better">+36.5%</span></td><td class="metric-cell">2,871</td><td class="metric-cell">2,778<span class="pct worse">-3.3%</span></td><td class="metric-cell">2,852<span class="pct neutral">-0.7%</span></td><td class="metric-cell">3,146<span class="pct better">+9.6%</span></td></tr><tr><td class="bench-name">Compound Sort (createdAt + _id)</td><td class="metric-cell">1,304<span class="pct worse">-3.9%</span></td><td class="metric-cell">1,071<span class="pct worse">-21.1%</span></td><td class="metric-cell">1,358</td><td class="metric-cell">2,582<span class="pct better">+90.1%</span></td><td class="metric-cell">1,269<span class="pct worse">-6.6%</span></td><td class="metric-cell">1,991<span class="pct better">+46.7%</span></td></tr><tr><td class="bench-name">Aggregation Pipeline</td><td class="metric-cell">5,502<span class="pct better">+14.1%</span></td><td class="metric-cell">5,671<span class="pct better">+17.7%</span></td><td class="metric-cell">4,820</td><td class="metric-cell">3,706<span class="pct worse">-23.1%</span></td><td class="metric-cell">5,622<span class="pct better">+16.6%</span></td><td class="metric-cell">5,578<span class="pct better">+15.7%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Query — p50 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Secondary Index Query (score)</td><td class="metric-cell">0.35<small>ms</small><span class="pct better">-33.0%</span></td><td class="metric-cell">0.38<small>ms</small><span class="pct better">-26.5%</span></td><td class="metric-cell">0.52<small>ms</small></td><td class="metric-cell">0.54<small>ms</small><span class="pct worse">+5.1%</span></td><td class="metric-cell">0.61<small>ms</small><span class="pct worse">+17.5%</span></td><td class="metric-cell">0.60<small>ms</small><span class="pct worse">+16.2%</span></td></tr><tr><td class="bench-name">Sort by _id</td><td class="metric-cell">0.32<small>ms</small><span class="pct better">-4.6%</span></td><td class="metric-cell">0.24<small>ms</small><span class="pct better">-27.7%</span></td><td class="metric-cell">0.34<small>ms</small></td><td class="metric-cell">0.36<small>ms</small><span class="pct worse">+6.6%</span></td><td class="metric-cell">0.35<small>ms</small><span class="pct worse">+2.4%</span></td><td class="metric-cell">0.32<small>ms</small><span class="pct better">-4.0%</span></td></tr><tr><td class="bench-name">Compound Sort (createdAt + _id)</td><td class="metric-cell">0.76<small>ms</small><span class="pct worse">+5.3%</span></td><td class="metric-cell">0.89<small>ms</small><span class="pct worse">+23.7%</span></td><td class="metric-cell">0.72<small>ms</small></td><td class="metric-cell">0.33<small>ms</small><span class="pct better">-54.7%</span></td><td class="metric-cell">0.79<small>ms</small><span class="pct worse">+9.6%</span></td><td class="metric-cell">0.34<small>ms</small><span class="pct better">-52.2%</span></td></tr><tr><td class="bench-name">Aggregation Pipeline</td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-7.8%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-10.3%</span></td><td class="metric-cell">0.18<small>ms</small></td><td class="metric-cell">0.27<small>ms</small><span class="pct worse">+49.3%</span></td><td class="metric-cell">0.16<small>ms</small><span class="pct better">-8.1%</span></td><td class="metric-cell">0.17<small>ms</small><span class="pct better">-3.7%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Query — p99 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Secondary Index Query (score)</td><td class="metric-cell">0.94<small>ms</small><span class="pct better">-15.4%</span></td><td class="metric-cell">1.96<small>ms</small><span class="pct worse">+76.7%</span></td><td class="metric-cell">1.11<small>ms</small></td><td class="metric-cell">0.95<small>ms</small><span class="pct better">-14.3%</span></td><td class="metric-cell">1.06<small>ms</small><span class="pct better">-4.7%</span></td><td class="metric-cell">1.02<small>ms</small><span class="pct better">-8.3%</span></td></tr><tr><td class="bench-name">Sort by _id</td><td class="metric-cell">0.51<small>ms</small><span class="pct better">-5.8%</span></td><td class="metric-cell">0.35<small>ms</small><span class="pct better">-34.5%</span></td><td class="metric-cell">0.54<small>ms</small></td><td class="metric-cell">0.62<small>ms</small><span class="pct worse">+15.4%</span></td><td class="metric-cell">0.52<small>ms</small><span class="pct better">-2.7%</span></td><td class="metric-cell">0.42<small>ms</small><span class="pct better">-22.6%</span></td></tr><tr><td class="bench-name">Compound Sort (createdAt + _id)</td><td class="metric-cell">1.05<small>ms</small><span class="pct better">-12.2%</span></td><td class="metric-cell">1.70<small>ms</small><span class="pct worse">+42.2%</span></td><td class="metric-cell">1.20<small>ms</small></td><td class="metric-cell">0.85<small>ms</small><span class="pct better">-28.7%</span></td><td class="metric-cell">1.06<small>ms</small><span class="pct better">-11.8%</span></td><td class="metric-cell">0.97<small>ms</small><span class="pct better">-18.7%</span></td></tr><tr><td class="bench-name">Aggregation Pipeline</td><td class="metric-cell">0.32<small>ms</small><span class="pct better">-49.9%</span></td><td class="metric-cell">0.34<small>ms</small><span class="pct better">-48.0%</span></td><td class="metric-cell">0.65<small>ms</small></td><td class="metric-cell">0.37<small>ms</small><span class="pct better">-43.1%</span></td><td class="metric-cell">0.29<small>ms</small><span class="pct better">-55.1%</span></td><td class="metric-cell">0.28<small>ms</small><span class="pct better">-57.4%</span></td></tr></tbody>
+    </table>
+  </section>
+  
+  <section>
+    <h2>Update / Delete — Ops/sec</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Update by _id</td><td class="metric-cell">18,114<span class="pct better">+4.6%</span></td><td class="metric-cell">18,512<span class="pct better">+6.9%</span></td><td class="metric-cell">17,324</td><td class="metric-cell">18,288<span class="pct better">+5.6%</span></td><td class="metric-cell">18,879<span class="pct better">+9.0%</span></td><td class="metric-cell">18,135<span class="pct better">+4.7%</span></td></tr><tr><td class="bench-name">Update Many (range)</td><td class="metric-cell">3,227<span class="pct neutral">+1.6%</span></td><td class="metric-cell">3,014<span class="pct worse">-5.1%</span></td><td class="metric-cell">3,175</td><td class="metric-cell">2,270<span class="pct worse">-28.5%</span></td><td class="metric-cell">3,218<span class="pct neutral">+1.3%</span></td><td class="metric-cell">3,142<span class="pct neutral">-1.1%</span></td></tr><tr><td class="bench-name">Delete by _id</td><td class="metric-cell">17,101<span class="pct neutral">-1.6%</span></td><td class="metric-cell">17,591<span class="pct neutral">+1.2%</span></td><td class="metric-cell">17,385</td><td class="metric-cell">17,241<span class="pct neutral">-0.8%</span></td><td class="metric-cell">17,640<span class="pct neutral">+1.5%</span></td><td class="metric-cell">17,329<span class="pct neutral">-0.3%</span></td></tr><tr><td class="bench-name">Delete Many (range)</td><td class="metric-cell">2,194<span class="pct neutral">+0.7%</span></td><td class="metric-cell">2,307<span class="pct better">+5.9%</span></td><td class="metric-cell">2,179</td><td class="metric-cell">1,415<span class="pct worse">-35.1%</span></td><td class="metric-cell">2,031<span class="pct worse">-6.8%</span></td><td class="metric-cell">2,118<span class="pct worse">-2.8%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Update / Delete — p50 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Update by _id</td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-1.3%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-0.8%</span></td><td class="metric-cell">0.05<small>ms</small></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-0.9%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-3.5%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-0.2%</span></td></tr><tr><td class="bench-name">Update Many (range)</td><td class="metric-cell">0.30<small>ms</small><span class="pct neutral">-1.6%</span></td><td class="metric-cell">0.30<small>ms</small><span class="pct neutral">-1.8%</span></td><td class="metric-cell">0.30<small>ms</small></td><td class="metric-cell">0.40<small>ms</small><span class="pct worse">+32.2%</span></td><td class="metric-cell">0.30<small>ms</small><span class="pct neutral">-0.1%</span></td><td class="metric-cell">0.31<small>ms</small><span class="pct worse">+2.9%</span></td></tr><tr><td class="bench-name">Delete by _id</td><td class="metric-cell">0.06<small>ms</small><span class="pct neutral">+1.0%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">-1.2%</span></td><td class="metric-cell">0.05<small>ms</small></td><td class="metric-cell">0.05<small>ms</small><span class="pct neutral">+0.4%</span></td><td class="metric-cell">0.05<small>ms</small><span class="pct better">-2.3%</span></td><td class="metric-cell">0.06<small>ms</small><span class="pct neutral">+0.5%</span></td></tr><tr><td class="bench-name">Delete Many (range)</td><td class="metric-cell">0.73<small>ms</small><span class="pct neutral">-1.2%</span></td><td class="metric-cell">0.69<small>ms</small><span class="pct better">-6.3%</span></td><td class="metric-cell">0.74<small>ms</small></td><td class="metric-cell">1.15<small>ms</small><span class="pct worse">+55.8%</span></td><td class="metric-cell">0.73<small>ms</small><span class="pct neutral">-1.0%</span></td><td class="metric-cell">0.72<small>ms</small><span class="pct better">-2.1%</span></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Update / Delete — p99 Latency</h2>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Auto-increment (Number)</th><th>Auto-increment (String)</th><th>ObjectId</th><th>UUID v4</th><th>UUID v7 (Binary)</th><th>UUID v7 (String)</th></tr></thead>
+      <tbody><tr><td class="bench-name">Update by _id</td><td class="metric-cell">0.07<small>ms</small><span class="pct better">-49.7%</span></td><td class="metric-cell">0.07<small>ms</small><span class="pct better">-49.5%</span></td><td class="metric-cell">0.14<small>ms</small></td><td class="metric-cell">0.08<small>ms</small><span class="pct better">-46.0%</span></td><td class="metric-cell">0.08<small>ms</small><span class="pct better">-47.9%</span></td><td class="metric-cell">0.08<small>ms</small><span class="pct better">-47.4%</span></td></tr><tr><td class="bench-name">Update Many (range)</td><td class="metric-cell">0.51<small>ms</small><span class="pct worse">+38.8%</span></td><td class="metric-cell">0.42<small>ms</small><span class="pct worse">+12.8%</span></td><td class="metric-cell">0.37<small>ms</small></td><td class="metric-cell">0.65<small>ms</small><span class="pct worse">+76.6%</span></td><td class="metric-cell">0.38<small>ms</small><span class="pct worse">+4.1%</span></td><td class="metric-cell">0.38<small>ms</small><span class="pct worse">+3.8%</span></td></tr><tr><td class="bench-name">Delete by _id</td><td class="metric-cell">0.10<small>ms</small><span class="pct neutral">+0.1%</span></td><td class="metric-cell">0.09<small>ms</small><span class="pct better">-5.4%</span></td><td class="metric-cell">0.10<small>ms</small></td><td class="metric-cell">0.09<small>ms</small><span class="pct better">-2.4%</span></td><td class="metric-cell">0.09<small>ms</small><span class="pct better">-4.5%</span></td><td class="metric-cell">0.09<small>ms</small><span class="pct better">-2.7%</span></td></tr><tr><td class="bench-name">Delete Many (range)</td><td class="metric-cell">0.90<small>ms</small><span class="pct better">-2.1%</span></td><td class="metric-cell">0.93<small>ms</small><span class="pct neutral">+0.8%</span></td><td class="metric-cell">0.92<small>ms</small></td><td class="metric-cell">1.68<small>ms</small><span class="pct worse">+81.9%</span></td><td class="metric-cell">1.36<small>ms</small><span class="pct worse">+47.4%</span></td><td class="metric-cell">0.98<small>ms</small><span class="pct worse">+6.3%</span></td></tr></tbody>
+    </table>
+  </section>
+  
+
+  <section>
+    <h2>Index & Storage</h2>
+    <div class="storage-grid">
+    <div class="storage-card" style="border-top: 3px solid #ef4444">
+      <h4>Auto-increment (Number)</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">370 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">2.3 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">1.3 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">612.0 KB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">440.0 KB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">36.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">228.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">4.0 KB</span></div></div></div>
+    <div class="storage-card" style="border-top: 3px solid #ec4899">
+      <h4>Auto-increment (String)</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">376 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">16.4 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">9.5 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">1.1 MB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">2.2 MB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">2.6 MB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">592.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">488.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">996.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">1.7 MB</span></div></div></div>
+    <div class="storage-card" style="border-top: 3px solid #10b981">
+      <h4>ObjectId</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">378 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">2.3 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">1.2 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">564.0 KB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">440.0 KB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">28.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">216.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">4.0 KB</span></div></div></div>
+    <div class="storage-card" style="border-top: 3px solid #f59e0b">
+      <h4>UUID v4</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">387 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">19.0 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">12.1 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">2.4 MB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">2.2 MB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">2.6 MB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">588.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">488.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">996.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">3.0 MB</span></div></div></div>
+    <div class="storage-card" style="border-top: 3px solid #3b82f6">
+      <h4>UUID v7 (Binary)</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">387 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">2.3 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">1.3 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">676.0 KB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">440.0 KB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">216.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">4.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">4.0 KB</span></div></div></div>
+    <div class="storage-card" style="border-top: 3px solid #8b5cf6">
+      <h4>UUID v7 (String)</h4>
+      <div class="storage-stats">
+        <div class="stat-row"><span class="stat-label">Avg Doc Size</span><span class="stat-value">407 B</span></div>
+        <div class="stat-row"><span class="stat-label">Storage Size</span><span class="stat-value">17.7 MB</span></div>
+        <div class="stat-row"><span class="stat-label">Total Index Size</span><span class="stat-value">14.1 MB</span></div>
+      </div><div class="index-breakdown"><h5>Index Breakdown</h5><div class="stat-row"><span class="stat-label">_id_</span><span class="stat-value">2.4 MB</span></div><div class="stat-row"><span class="stat-label">username_1</span><span class="stat-value">2.2 MB</span></div><div class="stat-row"><span class="stat-label">email_1</span><span class="stat-value">2.6 MB</span></div><div class="stat-row"><span class="stat-label">score_1</span><span class="stat-value">588.0 KB</span></div><div class="stat-row"><span class="stat-label">status_1</span><span class="stat-value">488.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1</span><span class="stat-value">996.0 KB</span></div><div class="stat-row"><span class="stat-label">createdAt_1__id_1</span><span class="stat-value">5.0 MB</span></div></div></div></div>
+  </section>
+
+  <section>
+    <h2>Sustained Workloads</h2>
+    <div class="sustained-grid">
+    <div class="sustained-card" style="border-top: 3px solid #ef4444">
+      <h4>Auto-increment (Number)</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">9,760</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">9,760 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">35,090</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">737,467</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">315,242</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.545ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">1.214ms</span></div></div></div>
+    <div class="sustained-card" style="border-top: 3px solid #ec4899">
+      <h4>Auto-increment (String)</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">9,860</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">9,860 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">36,983</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">776,369</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">333,132</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.536ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">1.155ms</span></div></div></div>
+    <div class="sustained-card" style="border-top: 3px solid #10b981">
+      <h4>ObjectId</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">20,827</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">20,827 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">43,112</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">905,844</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">387,533</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.656ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">0.819ms</span></div></div></div>
+    <div class="sustained-card" style="border-top: 3px solid #f59e0b">
+      <h4>UUID v4</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">20,100</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">20,100 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">42,379</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">889,933</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">381,456</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.837ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">1.079ms</span></div></div></div>
+    <div class="sustained-card" style="border-top: 3px solid #3b82f6">
+      <h4>UUID v7 (Binary)</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">21,170</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">21,170 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">46,792</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">982,491</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">421,273</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.493ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">0.566ms</span></div></div></div>
+    <div class="sustained-card" style="border-top: 3px solid #8b5cf6">
+      <h4>UUID v7 (String)</h4>
+      <div class="sustained-stats">
+        <div class="sustained-metric">
+          <span class="metric-title">Sustained Writes</span>
+          <span class="metric-big">20,367</span>
+          <span class="metric-unit">ops/sec</span>
+        </div><div class="stat-row"><span class="stat-label">Avg Throughput</span><span class="stat-value">20,368 ops/sec</span></div>
+        <div class="sustained-metric" style="margin-top: 1rem">
+          <span class="metric-title">Mixed Workload</span>
+          <span class="metric-big">44,815</span>
+          <span class="metric-unit">ops/sec</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Read ops</span><span class="stat-value">940,532</span></div>
+        <div class="stat-row"><span class="stat-label">Write ops</span><span class="stat-value">403,929</span></div>
+        <div class="stat-row"><span class="stat-label">Read p99</span><span class="stat-value">0.507ms</span></div>
+        <div class="stat-row"><span class="stat-label">Write p99</span><span class="stat-value">0.557ms</span></div></div></div></div>
+  </section>
+</div>
+
+<script>
+  Chart.defaults.color = '#9198ad';
+  Chart.defaults.borderColor = '#2e3348';
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif";
+  Chart.defaults.font.size = 11;
+
+  const defaultOpts = (yTitle) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+  display: true,
+  position: 'bottom',
+  labels: {
+    boxWidth: 12,
+    padding: 12,
+    font: { size: 10 },
+    usePointStyle: true,
+    pointStyle: 'rectRounded'
+  }
+},
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ctx.dataset.label + ': ' + Number(ctx.raw).toLocaleString(undefined, { maximumFractionDigits: 2 }) + (yTitle ? ' ' + yTitle : '')
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { maxRotation: 45, font: { size: 10 } }, grid: { display: false } },
+      y: {
+        beginAtZero: true,
+        title: yTitle ? { display: true, text: yTitle } : undefined,
+        ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'K' : v }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('chart-individual-ops'), {
+    type: 'bar',
+    data: { labels: ["Individual Inserts","Upserts"], datasets: [{ label: 'Auto-increment (Number)', data: [9437.339897003232,17221.986017900093], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [9190.593611250759,14581.493804982376], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [18032.617387510953,14979.670706902058], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [17915.679396280015,15629.038519132973], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [18824.399036990424,17686.72128560844], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [18281.752891030694,17397.18913615126], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts(null)
+  });
+
+  new Chart(document.getElementById('chart-bulk-ops'), {
+    type: 'bar',
+    data: { labels: ["Unordered Bulk Inserts","Ordered Bulk Inserts"], datasets: [{ label: 'Auto-increment (Number)', data: [420210.73627253575,299089.56866118876], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [397545.751304321,355357.03069123457], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [390738.6484727595,319781.43936337554], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [338648.22647603875,274279.03930562915], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [372520.2356996619,310672.25010562496], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [340564.51121968427,250100.17137113985], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts(null)
+  });
+
+  new Chart(document.getElementById('chart-read-ops'), {
+    type: 'bar',
+    data: { labels: ["Find by _id","Find by _id $in","Range Scan on _id","Cursor Pagination (_id)","Cursor Pagination (createdAt + _id)","Count Documents","Random Access by _id"], datasets: [{ label: 'Auto-increment (Number)', data: [18874.981884028308,6100.9710650251955,3278.1032058279143,6174.753107899872,4982.390364057017,460.30698102718196,18048.3139829087], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [18012.526371959728,5719.8728043285,3313.655740991412,6338.959973809856,5160.064158173664,494.19111284686187,18232.134730006], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [18417.198348161466,5819.005653958287,3195.446279430539,5935.488657652092,4888.6308778147695,473.94161375437943,17475.602612646613], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [18474.698142507485,4568.423415516346,1212.3456180298638,2570.6624332312267,3700.6826445736433,439.6901239882181,18319.264022542015], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [19025.906863905064,5929.391325745198,3271.7829172034417,6104.027895407581,5069.0712921535915,467.462250986955,17972.318136989496], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [18712.67989902638,5730.277954094451,3062.6253283708606,5941.984071858106,4926.947654432946,445.9044843610708,17392.083210682904], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts(null)
+  });
+
+  new Chart(document.getElementById('chart-query-ops'), {
+    type: 'bar',
+    data: { labels: ["Secondary Index Query (score)","Sort by _id","Compound Sort (createdAt + _id)","Aggregation Pipeline"], datasets: [{ label: 'Auto-increment (Number)', data: [2155.519433839888,3033.459781840397,1304.4445393065503,5501.611732917621], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [1574.2582950916474,3919.852027404778,1070.8201257348362,5671.439351133376], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [1904.53088190102,2871.3120305502443,1357.816392265552,4819.888804586852], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [1872.7824208951317,2777.883781051227,2581.5840524311834,3705.912372575363], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [1737.8712591039903,2852.314499904768,1268.8303075826072,5621.832020356309], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [1761.2533596574906,3146.07175745076,1991.3896957459494,5578.311689270165], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts(null)
+  });
+
+  new Chart(document.getElementById('chart-ud-ops'), {
+    type: 'bar',
+    data: { labels: ["Update by _id","Update Many (range)","Delete by _id","Delete Many (range)"], datasets: [{ label: 'Auto-increment (Number)', data: [18113.75164325685,3226.562778744775,17101.05360754151,2194.364978259687], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [18511.718033213263,3013.8471145400117,17590.705178335153,2307.182047761117], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [17323.609226523782,3175.1634548744682,17385.193074521416,2179.4811677516227], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [18288.124823591697,2269.5516232507375,17240.561869911337,1414.653101312878], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [18878.55561288621,3217.686981801602,17639.98466048098,2030.9405259173227], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [18135.499851408535,3141.655683961987,17329.403237253115,2118.167255781948], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts(null)
+  });
+
+  new Chart(document.getElementById('chart-read-p99'), {
+    type: 'bar',
+    data: { labels: ["Find by _id","Find by _id $in","Range Scan on _id","Cursor Pagination (_id)","Cursor Pagination (createdAt + _id)","Count Documents","Random Access by _id"], datasets: [{ label: 'Auto-increment (Number)', data: [0.0742499999996653,0.21229200000016135,0.4890420000001541,0.29787499999929423,0.25662499999998545,2.995208000000275,0.10079200000018318], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [0.09333299999980227,0.2502919999997175,0.43312499999956344,0.18270900000061374,0.23758300000008603,3.214665999999852,0.09812499999952706], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [0.08662500000036744,0.27204100000017206,0.4773750000003929,0.31125000000065484,0.2510419999998703,2.6530000000002474,0.09791700000005221], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [0.07691699999941193,0.3179579999996349,3.3814999999995052,0.6929580000005444,0.48800000000028376,4.277292000000671,0.09541700000045239], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [0.07195899999987887,0.21591699999953562,0.4709999999995489,0.3358749999997599,0.2417909999994663,2.7023339999996097,0.09854200000063429], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [0.07758300000023155,0.2452499999999418,0.5909580000006827,0.3101249999999709,0.26379199999973935,3.2285000000001673,0.10854099999960454], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts('ms')
+  });
+
+  new Chart(document.getElementById('chart-query-p99'), {
+    type: 'bar',
+    data: { labels: ["Secondary Index Query (score)","Sort by _id","Compound Sort (createdAt + _id)","Aggregation Pipeline"], datasets: [{ label: 'Auto-increment (Number)', data: [0.939542000000074,0.5062090000010357,1.05120800000077,0.3234169999996084], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [1.9612919999999576,0.3520840000019234,1.7016250000015134,0.3357499999983702], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [1.1100830000013957,0.53729199999907,1.1967919999988226,0.6454170000033628], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [0.9510410000002594,0.6200000000008004,0.8532089999971504,0.3669999999983702], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [1.0579589999997552,0.5230420000007143,1.0551249999989523,0.2897499999999127], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [1.0177089999997406,0.41587500000059663,0.9724170000008598,0.275166999999783], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts('ms')
+  });
+
+  new Chart(document.getElementById('chart-individual-p99'), {
+    type: 'bar',
+    data: { labels: ["Individual Inserts","Upserts"], datasets: [{ label: 'Auto-increment (Number)', data: [0.16979200000014316,0.10612499999979264], backgroundColor: '#ef4444cc', borderColor: '#ef4444', borderWidth: 1 },{ label: 'Auto-increment (String)', data: [0.22454100000004473,0.3190829999998641], backgroundColor: '#ec4899cc', borderColor: '#ec4899', borderWidth: 1 },{ label: 'ObjectId', data: [0.11670800000001691,0.2606250000003456], backgroundColor: '#10b981cc', borderColor: '#10b981', borderWidth: 1 },{ label: 'UUID v4', data: [0.1097500000000764,0.1760420000000522], backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 },{ label: 'UUID v7 (Binary)', data: [0.10887500000012551,0.10187499999983629], backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },{ label: 'UUID v7 (String)', data: [0.11599999999998545,0.10229100000015023], backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1 }] },
+    options: defaultOpts('ms')
+  });
+</script>
+</body>
+</html>

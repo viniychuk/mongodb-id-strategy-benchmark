@@ -18,7 +18,9 @@ function loadResults(dir: string): ResultFile[] {
   // Take the latest file for each mode (use mode from JSON, not filename)
   const byMode = new Map<string, ResultFile>();
   for (const f of files) {
+    if (f.startsWith('_')) continue;
     const data: ResultFile = JSON.parse(readFileSync(join(dir, f), 'utf-8'));
+    if (!data.mode || !data.results) continue;
     byMode.set(data.mode, data);
   }
 

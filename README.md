@@ -2,6 +2,8 @@
 
 Benchmarks 6 different `_id` strategies in MongoDB across 22 operations to help you choose the right ID type for your workload.
 
+**[View interactive results](https://viniychuk.github.io/mongodb-id-strategy-benchmark/)**
+
 ## Strategies Tested
 
 | Strategy | `_id` type | Generation | Time-sortable |

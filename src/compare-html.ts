@@ -28,7 +28,9 @@ function loadResults(dir: string): ResultFile[] {
 
   const byMode = new Map<string, ResultFile>();
   for (const f of files) {
+    if (f.startsWith('_')) continue; // skip metadata files
     const data: ResultFile = JSON.parse(readFileSync(join(dir, f), 'utf-8'));
+    if (!data.mode || !data.results) continue;
     byMode.set(data.mode, data);
   }
 
