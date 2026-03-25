@@ -1,0 +1,29 @@
+{
+  "name": "uuid-objectid-benchmark",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "bench:objectid": "tsx src/index.ts --mode objectid",
+    "bench:uuid7": "tsx src/index.ts --mode uuid7",
+    "bench:uuid7-string": "tsx src/index.ts --mode uuid7-string",
+    "bench:uuid4": "tsx src/index.ts --mode uuid4",
+    "bench:autoincrement": "tsx src/index.ts --mode autoincrement",
+    "bench:autoincrement-string": "tsx src/index.ts --mode autoincrement-string",
+    "bench:all": "tsx src/bench-all.ts",
+    "compare": "tsx src/compare.ts",
+    "compare:html": "tsx src/compare-html.ts",
+    "test:contention": "tsx src/test-contention.ts"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^9.0.0",
+    "mongodb": "^6.0.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

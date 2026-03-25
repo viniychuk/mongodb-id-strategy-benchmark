@@ -1,0 +1,9 @@
+node_modules/
+dist/
+results/
+results-*/
+results copy/
+.idea/
+.DS_Store
+*.zip
+*.tsbuildinfo
