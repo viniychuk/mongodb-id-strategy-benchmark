@@ -28,13 +28,13 @@ Point lookups are identical across all strategies. **UUID v4 collapses on range 
 
 ### Mixed Workload — 70/30 Read/Write, 10 Workers (ops/sec)
 
-<img src="docs/images/sustained.png" alt="Sustained Workloads" width="600">
+![Sustained Workloads](docs/images/sustained.png)
 
 Under concurrent load, **auto-increment drops 19%** vs ObjectId — the counter document becomes a serialization bottleneck. All client-side strategies perform within 10% of each other.
 
 ### Storage & Index Size
 
-<img src="docs/images/storage.png" alt="Storage" width="600">
+![Storage](docs/images/storage.png)
 
 Local WiredTiger reports artificially small sizes for compact modes (4 KB page minimums). On **Atlas M50, the real overhead is ~14%** (ObjectId: 32 MB vs UUID v7 string: 37 MB total index for 100K docs). The `_id_` index itself grows from 3.7 MB to 5.5 MB (+49%), and compound indexes containing `_id` pay the same per-entry overhead. UUID v7 binary stays comparable to ObjectId.
 
